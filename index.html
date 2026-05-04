@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snake Game</title>
+
+  <!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  SETUP INSTRUCTIONS (5 minutes)                              ║
+  ║                                                              ║
+  ║  1. Go to https://console.firebase.google.com               ║
+  ║  2. Click "Add project" → name it "snake-game"              ║
+  ║  3. Build → Realtime Database → Create database             ║
+  ║     → Start in TEST MODE → Done                             ║
+  ║  4. Project Settings (gear icon) → Your apps → </> Web      ║
+  ║  5. Copy the firebaseConfig values below                     ║
+  ║  6. Change ACCESS_CODE to whatever password you want        ║
+  ║  7. Share link: yourpage.html?code=YOUR_CODE                ║
+  ╚══════════════════════════════════════════════════════════════╝
+  -->
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: radial-gradient(ellipse at center, #0d1b2a 0%, #050d14 100%);
+      min-height: 100vh;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+      overflow: hidden;
+      transition: background 0.4s, filter 0.4s;
+    }
+    body.night { background:#000; filter: brightness(0.5) saturate(0.6); }
+
+    /* ── GATE SCREEN ─────────────────────────────── */
+    #gate {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      gap: 16px;
+    }
+    #gate h2 {
+      font-size: 13px;
+      letter-spacing: 3px;
+      color: #888;
+      text-transform: uppercase;
+    }
+    .gate-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid #4ecca333;
+      border-radius: 12px;
+      padding: 32px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      width: 320px;
+    }
+    .gate-card input {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid #4ecca344;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      letter-spacing: 2px;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .gate-card input:focus { border-color: #4ecca3; }
+    .gate-card input.error { border-color: #e74c3c; animation: shake 0.3s; }
+    @keyframes shake {
+      0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)}
+    }
+    .gate-card input::placeholder { color: #555; letter-spacing: 1px; }
+    .gate-btn {
+      width: 100%;
+      padding: 10px;
+      background: rgba(78,204,163,0.15);
+      border: 1px solid #4ecca355;
+      border-radius: 8px;
+      color: #4ecca3;
+      font-size: 14px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .gate-btn:hover { background: rgba(78,204,163,0.28); box-shadow: 0 0 12px #4ecca355; }
+    #gateError { font-size: 12px; color: #e74c3c; min-height: 16px; }
+    #gateStep2 { display: none; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+    .share-box {
+      width: 320px;
+      background: rgba(245,166,35,0.07);
+      border: 1px solid #f5a62333;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #888;
+      text-align: center;
+      word-break: break-all;
+    }
+    .share-box span { color: #f5a623; font-weight: bold; }
+    .copy-btn {
+      margin-top: 6px;
+      padding: 5px 14px;
+      background: rgba(245,166,35,0.12);
+      border: 1px solid #f5a62344;
+      border-radius: 6px;
+      color: #f5a623;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: rgba(245,166,35,0.25); }
+
+    /* ── GAME LAYOUT ─────────────────────────────── */
+    #app {
+      display: none;
+      height: 100vh;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 10px;
+    }
+
+    /* Left column */
+    #leftCol {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+    }
+    #titleCanvas { display: block; }
+    #scorebar {
+      display: flex;
+      gap: 40px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid #4ecca333;
+      border-radius: 8px;
+      padding: 6px 28px;
+      letter-spacing: 1px;
+    }
+    .score-block { text-align: center; }
+    .score-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+    .score-val   { font-size: 20px; font-weight: bold; color: #4ecca3; text-shadow: 0 0 8px #4ecca388; }
+    #bestVal     { color: #f5a623; text-shadow: 0 0 8px #f5a62366; }
+
+    #canvasWrap { position: relative; }
+    canvas#canvas {
+      border: 2px solid #4ecca344;
+      border-radius: 8px;
+      box-shadow: 0 0 40px #4ecca322;
+      display: block;
+    }
+    #pauseOverlay {
+      display: none;
+      position: absolute;
+      top:50%; left:50%;
+      transform: translate(-50%,-50%);
+      font-size: 32px; font-weight: bold;
+      letter-spacing: 6px; color: #4ecca3;
+      text-shadow: 0 0 20px #4ecca3;
+      pointer-events: none;
+    }
+
+    #controls { display: flex; gap: 8px; }
+    .btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 13px;
+      border-radius: 7px;
+      border: 1px solid #4ecca355;
+      background: rgba(78,204,163,0.08);
+      color: #4ecca3;
+      font-size: 12px; font-family: inherit;
+      cursor: pointer; letter-spacing: 1px;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover { background: rgba(78,204,163,0.2); box-shadow: 0 0 10px #4ecca355; }
+    .btn.night-btn { border-color:#f5a62355; background:rgba(245,166,35,0.08); color:#f5a623; }
+    .btn.night-btn:hover { background:rgba(245,166,35,0.2); box-shadow:0 0 10px #f5a62355; }
+
+    #message {
+      font-size: 14px; color: #f5a623;
+      letter-spacing: 1px; text-shadow: 0 0 8px #f5a62388;
+      min-height: 18px;
+    }
+    #legend {
+      font-size: 11px; color: #888;
+      display: flex; gap: 14px;
+    }
+    #legend span { display: flex; align-items: center; gap: 4px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+    /* ── RIGHT PANEL: LEADERBOARD ───────────────── */
+    #rightCol {
+      width: 220px;
+      height: 500px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid #4ecca322;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #lbHeader {
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid #4ecca322;
+    }
+    #lbHeader h3 {
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #4ecca3;
+    }
+    #playerTag {
+      font-size: 11px;
+      color: #666;
+      margin-top: 3px;
+    }
+    #playerTag span { color: #f5a623; }
+    #lbList {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    #lbList::-webkit-scrollbar { width: 4px; }
+    #lbList::-webkit-scrollbar-thumb { background: #4ecca322; border-radius: 2px; }
+    .lb-row {
+      display: flex;
+      align-items: center;
+      padding: 7px 14px;
+      gap: 10px;
+      transition: background 0.2s;
+    }
+    .lb-row:hover { background: rgba(255,255,255,0.03); }
+    .lb-row.me { background: rgba(78,204,163,0.08); }
+    .lb-rank {
+      width: 20px; text-align: center;
+      font-size: 11px; color: #555;
+      flex-shrink: 0;
+    }
+    .lb-rank.gold   { color: #ffd700; font-weight: bold; }
+    .lb-rank.silver { color: #c0c0c0; font-weight: bold; }
+    .lb-rank.bronze { color: #cd7f32; font-weight: bold; }
+    .lb-name {
+      flex: 1;
+      font-size: 13px;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lb-row.me .lb-name { color: #4ecca3; font-weight: bold; }
+    .lb-score {
+      font-size: 14px;
+      font-weight: bold;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    #lbEmpty {
+      text-align: center;
+      color: #444;
+      font-size: 12px;
+      padding: 30px 14px;
+      line-height: 1.8;
+    }
+    #lbFooter {
+      padding: 10px 14px;
+      border-top: 1px solid #4ecca322;
+      font-size: 10px;
+      color: #555;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+    #lbStatus { color: #4ecca355; }
+  </style>
+</head>
+<body>
+
+  <!-- ── ACCESS GATE ──────────────────────────── -->
+  <div id="gate">
+    <canvas id="gateTitleCanvas" width="420" height="64"></canvas>
+    <h2>Private Access Required</h2>
+    <div class="gate-card">
+      <!-- Step 1: Code -->
+      <div id="gateStep1" style="display:flex;flex-direction:column;align-items:center;gap:14px;width:100%">
+        <input id="codeInput" type="password" placeholder="ENTER ACCESS CODE" maxlength="20" autocomplete="off">
+        <div id="gateError"></div>
+        <button class="gate-btn" onclick="checkCode()">VERIFY →</button>
+      </div>
+      <!-- Step 2: Name -->
+      <div id="gateStep2">
+        <input id="nameInput" type="text" placeholder="YOUR NAME" maxlength="16" autocomplete="off">
+        <button class="gate-btn" onclick="enterGame()">ENTER GAME →</button>
+      </div>
+    </div>
+    <!-- Share box (shown after code verified) -->
+    <div class="share-box" id="shareBox" style="display:none">
+      Share this link with friends:<br>
+      <span id="shareUrl"></span><br>
+      <button class="copy-btn" onclick="copyLink()">Copy Link</button>
+    </div>
+  </div>
+
+  <!-- ── GAME APP ──────────────────────────────── -->
+  <div id="app">
+    <!-- Left: game -->
+    <div id="leftCol">
+      <canvas id="titleCanvas" width="420" height="64"></canvas>
+      <div id="scorebar">
+        <div class="score-block">
+          <div class="score-label">Score</div>
+          <div class="score-val" id="scoreVal">0</div>
+        </div>
+        <div class="score-block">
+          <div class="score-label">Best</div>
+          <div class="score-val" id="bestVal">0</div>
+        </div>
+      </div>
+      <div id="canvasWrap">
+        <canvas id="canvas" width="400" height="400"></canvas>
+        <div id="pauseOverlay">⏸ PAUSED</div>
+      </div>
+      <div id="controls">
+        <button class="btn" id="btnRestart">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+          Restart
+        </button>
+        <button class="btn" id="btnPause">
+          <svg id="iconPause" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          <svg id="iconPlay" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:none"><polygon points="5,3 19,12 5,21"/></svg>
+          <span id="pauseLabel">Pause</span>
+        </button>
+        <button class="btn" id="btnFullscreen">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          Fullscreen
+        </button>
+        <button class="btn night-btn" id="btnNight">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          Lights Out
+        </button>
+      </div>
+      <div id="message">Press any arrow key to start</div>
+      <div id="legend">
+        <span><span class="dot" style="background:#e056fd"></span> Bonus +5</span>
+        <span><span class="dot" style="background:#e74c3c;border-radius:2px"></span> Obstacle</span>
+      </div>
+    </div>
+
+    <!-- Right: leaderboard -->
+    <div id="rightCol">
+      <div id="lbHeader">
+        <h3>🏆 Leaderboard</h3>
+        <div id="playerTag">Playing as <span id="playerTagName">—</span></div>
+      </div>
+      <div id="lbList"><div id="lbEmpty">Play a game to<br>appear here!<br><br><span style="color:#333;font-size:10px">Scores update live</span></div></div>
+      <div id="lbFooter"><span id="lbStatus">● LOCAL MODE</span></div>
+    </div>
+  </div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  CONFIGURATION — change these values
+// ════════════════════════════════════════════════════════════
+const ACCESS_CODE = "Bestofus@!";   // ← change this to your password
+
+// Paste your Firebase config here (from Firebase console → Project Settings)
+const FIREBASE_CONFIG = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL:       "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+// ════════════════════════════════════════════════════════════
+
+// ── FIREBASE INIT ──────────────────────────────────────────
+let db = null;
+const firebaseReady = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+if (firebaseReady) {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+  } catch(e) { console.warn("Firebase init failed:", e); }
+}
+
+// ── PLAYER / SESSION ───────────────────────────────────────
+let playerId = localStorage.getItem('snakePlayerId');
+if (!playerId) { playerId = Math.random().toString(36).slice(2,10); localStorage.setItem('snakePlayerId', playerId); }
+let playerName = '';
+let roomRef = null;
+
+// ── AUTO-FILL CODE FROM URL ────────────────────────────────
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const urlCode = params.get('code');
+  if (urlCode) document.getElementById('codeInput').value = urlCode;
+})();
+
+// ── DRAW DOT-MATRIX TITLE (reusable) ──────────────────────
+const FONT = {
+  S:[[0,1,1,1,0],[1,0,0,0,0],[0,1,1,1,0],[0,0,0,0,1],[0,1,1,1,0]],
+  N:[[1,0,0,0,1],[1,1,0,0,1],[1,0,1,0,1],[1,0,0,1,1],[1,0,0,0,1]],
+  A:[[0,1,1,1,0],[1,0,0,0,1],[1,1,1,1,1],[1,0,0,0,1],[1,0,0,0,1]],
+  K:[[1,0,0,1,0],[1,0,1,0,0],[1,1,0,0,0],[1,0,1,0,0],[1,0,0,1,0]],
+  E:[[1,1,1,1,1],[1,0,0,0,0],[1,1,1,1,0],[1,0,0,0,0],[1,1,1,1,1]],
+  G:[[0,1,1,1,0],[1,0,0,0,0],[1,0,1,1,1],[1,0,0,0,1],[0,1,1,1,0]],
+  M:[[1,0,0,0,1],[1,1,0,1,1],[1,0,1,0,1],[1,0,0,0,1],[1,0,0,0,1]],
+};
+function drawDotTitle(canvasEl) {
+  const c=canvasEl.getContext('2d'), DOT=9,GAP=3,LGAP=10,STEP=DOT+GAP;
+  function rowW(l){return l.length*5*STEP+(l.length-1)*LGAP-GAP;}
+  function drawLine(letters,sy,col){
+    let sx=(canvasEl.width-rowW(letters))/2;
+    letters.forEach(ch=>{
+      FONT[ch].forEach((row,ry)=>row.forEach((on,cx2)=>{
+        if(!on)return;
+        const px=sx+cx2*STEP,py=sy+ry*STEP;
+        c.shadowColor=col.glow;c.shadowBlur=10;
+        const g=c.createRadialGradient(px+DOT/2,py+DOT/2,1,px+DOT/2,py+DOT/2,DOT/2);
+        g.addColorStop(0,col.hi);g.addColorStop(1,col.lo);
+        c.fillStyle=g;c.beginPath();c.roundRect(px,py,DOT,DOT,3);c.fill();
+      }));
+      sx+=5*STEP+LGAP;
+    });
+    c.shadowBlur=0;
+  }
+  drawLine(['S','N','A','K','E'],2, {hi:'#7fffd4',lo:'#00b894',glow:'#4ecca3'});
+  drawLine(['G','A','M','E'],   36,{hi:'#ffe082',lo:'#f5a623',glow:'#f5a62388'});
+}
+drawDotTitle(document.getElementById('gateTitleCanvas'));
+
+// ── GATE LOGIC ─────────────────────────────────────────────
+function checkCode() {
+  const val = document.getElementById('codeInput').value.trim();
+  const expected = ACCESS_CODE;
+  if (val === expected) {
+    document.getElementById('gateStep1').style.display = 'none';
+    document.getElementById('gateStep2').style.display = 'flex';
+    document.getElementById('nameInput').focus();
+    // Show shareable link
+    const shareUrl = window.location.href.split('?')[0] + '?code=' + ACCESS_CODE;
+    document.getElementById('shareUrl').textContent = shareUrl;
+    document.getElementById('shareBox').style.display = 'block';
+  } else {
+    const inp = document.getElementById('codeInput');
+    inp.classList.add('error');
+    document.getElementById('gateError').textContent = 'Invalid code. Try again.';
+    setTimeout(()=>inp.classList.remove('error'), 400);
+    inp.value=''; inp.focus();
+  }
+}
+function copyLink() {
+  const url = window.location.href.split('?')[0] + '?code=' + ACCESS_CODE;
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy Link',2000);
+  });
+}
+function enterGame() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { document.getElementById('nameInput').focus(); return; }
+  playerName = name.slice(0,16);
+  localStorage.setItem('snakePlayerName', playerName);
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app').style.display   = 'flex';
+  document.getElementById('playerTagName').textContent = playerName;
+  drawDotTitle(document.getElementById('titleCanvas'));
+  initLeaderboard();
+  init();
+}
+// Allow enter key on inputs
+document.getElementById('codeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkCode(); });
+document.getElementById('nameInput').addEventListener('keydown', e=>{ if(e.key==='Enter') enterGame(); });
+// Auto-submit if code is in URL
+window.addEventListener('load', ()=>{
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('code')) {
+    setTimeout(()=>{ document.getElementById('codeInput').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); }, 100);
+    // Actually just call checkCode after short delay
+    setTimeout(checkCode, 150);
+  }
+});
+
+// ── LEADERBOARD ────────────────────────────────────────────
+let localScores = JSON.parse(localStorage.getItem('snakeLocalScores') || '{}');
+
+function initLeaderboard() {
+  if (db) {
+    roomRef = db.ref('snake_rooms/' + ACCESS_CODE.toLowerCase().replace(/\W/g,'') + '/scores');
+    roomRef.on('value', snap => {
+      const data = snap.val() || {};
+      renderLeaderboard(data);
+    });
+    document.getElementById('lbStatus').textContent = '● LIVE';
+    document.getElementById('lbStatus').style.color = '#4ecca3';
+  } else {
+    renderLeaderboard(localScores);
+    document.getElementById('lbStatus').textContent = '● LOCAL — Add Firebase for live';
+    document.getElementById('lbStatus').style.color = '#f5a62388';
+  }
+}
+
+function renderLeaderboard(data) {
+  const list = document.getElementById('lbList');
+  const entries = Object.values(data).sort((a,b)=>b.score-a.score);
+  if (entries.length === 0) {
+    list.innerHTML = '<div id="lbEmpty">Play a game to<br>appear here!<br><br><span style="color:#333;font-size:10px">Scores update live</span></div>';
+    return;
+  }
+  const rankSymbols = ['🥇','🥈','🥉'];
+  const rankClasses = ['gold','silver','bronze'];
+  list.innerHTML = entries.slice(0,20).map((e,i)=>{
+    const isMe = e.id === playerId;
+    const rankDisplay = i < 3 ? rankSymbols[i] : (i+1);
+    const rankClass = i < 3 ? rankClasses[i] : '';
+    return `<div class="lb-row${isMe?' me':''}">
+      <div class="lb-rank ${rankClass}">${rankDisplay}</div>
+      <div class="lb-name">${escHtml(e.name)}</div>
+      <div class="lb-score">${e.score}</div>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function submitScore(s) {
+  const entry = { id: playerId, name: playerName, score: s, ts: Date.now() };
+  // Update local fallback
+  if (!localScores[playerId] || localScores[playerId].score < s) {
+    localScores[playerId] = entry;
+    localStorage.setItem('snakeLocalScores', JSON.stringify(localScores));
+    if (!db) renderLeaderboard(localScores);
+  }
+  // Push to Firebase
+  if (db && roomRef) {
+    roomRef.child(playerId).transaction(current => {
+      if (!current || current.score < s) return entry;
+      return undefined; // abort if not a new best
+    });
+  }
+}
+
+// ── GAME ───────────────────────────────────────────────────
+const canvas     = document.getElementById('canvas');
+const ctx        = canvas.getContext('2d');
+const scoreValEl = document.getElementById('scoreVal');
+const bestValEl  = document.getElementById('bestVal');
+const msgEl      = document.getElementById('message');
+const pauseOverlay = document.getElementById('pauseOverlay');
+
+let bestScore = parseInt(localStorage.getItem('snakeBest')||'0');
+
+const CELL=20, COLS=canvas.width/CELL, ROWS=canvas.height/CELL;
+const BONUS_DURATION=5000,BONUS_INTERVAL=8000,BONUS_POINTS=5;
+const OBSTACLE_DURATION=4000,OBSTACLE_INTERVAL=6000;
+
+let snake,dir,nextDir,food,score,gameLoop,running,paused=false;
+let bonus,bonusTimer,bonusSpawnTimer;
+let obstacles,obstacleTimers,obstacleSpawnTimer;
+
+// Strawberry
+const sbCanvas=document.createElement('canvas');
+sbCanvas.width=sbCanvas.height=CELL;
+(function(c){
+  const cx=CELL/2,cy=CELL/2+1,r=CELL/2-2;
+  const g=c.createRadialGradient(cx-r*.2,cy-r*.2,r*.1,cx,cy,r);
+  g.addColorStop(0,'#ff6b6b');g.addColorStop(.6,'#e01010');g.addColorStop(1,'#8b0000');
+  c.beginPath();c.moveTo(cx,cy+r);
+  c.bezierCurveTo(cx-r*1.1,cy,cx-r*1.1,cy-r*.5,cx,cy-r*.15);
+  c.bezierCurveTo(cx+r*1.1,cy-r*.5,cx+r*1.1,cy,cx,cy+r);
+  c.fillStyle=g;c.fill();
+  c.fillStyle='rgba(255,220,100,0.85)';
+  [{dx:-.25,dy:.1},{dx:.25,dy:.1},{dx:0,dy:.4},{dx:-.2,dy:-.15},{dx:.2,dy:-.15}]
+    .forEach(s=>{c.beginPath();c.ellipse(cx+s.dx*r,cy+s.dy*r,1.2,1.6,0,0,Math.PI*2);c.fill();});
+  c.fillStyle='#27ae60';
+  [[cx-3,4,4,2,-.6],[cx+3,4,4,2,.6],[cx,2,2,4,0]]
+    .forEach(([ex,ey,rx,ry,rot])=>{c.beginPath();c.ellipse(ex,ey,rx,ry,rot,0,Math.PI*2);c.fill();});
+  c.strokeStyle='#145a32';c.lineWidth=1.5;c.beginPath();c.moveTo(cx,0);c.lineTo(cx,-2);c.stroke();
+})(sbCanvas.getContext('2d'));
+
+function randomCell(){return{x:Math.floor(Math.random()*COLS),y:Math.floor(Math.random()*ROWS)};}
+function isFree(cell,extras=[]){return![...snake,food,...obstacles,...extras].some(b=>b&&b.x===cell.x&&b.y===cell.y);}
+
+function init(){
+  snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+  dir={x:1,y:0};nextDir={x:1,y:0};
+  score=0;running=false;paused=false;bonus=null;obstacles=[];obstacleTimers=[];
+  clearTimeout(bonusTimer);clearInterval(bonusSpawnTimer);clearInterval(obstacleSpawnTimer);
+  obstacleTimers.forEach(clearTimeout);
+  scoreValEl.textContent='0';bestValEl.textContent=bestScore;
+  msgEl.textContent='Press any arrow key to start';
+  setPauseUI(false);placeFood();draw();
+}
+
+function placeFood(){let c;do{c=randomCell();}while(!isFree(c));food=c;}
+
+function spawnBonus(){
+  if(!running||paused)return;
+  let c;do{c=randomCell();}while(!isFree(c,bonus?[bonus]:[]));
+  bonus=c;clearTimeout(bonusTimer);bonusTimer=setTimeout(()=>{bonus=null;},BONUS_DURATION);
+}
+function spawnObstacle(){
+  if(!running||paused)return;
+  let c;do{c=randomCell();}while(!isFree(c,bonus?[bonus]:[]));
+  obstacles.push(c);
+  const t=setTimeout(()=>{const i=obstacles.indexOf(c);if(i!==-1)obstacles.splice(i,1);},OBSTACLE_DURATION);
+  obstacleTimers.push(t);
+}
+
+function start(){
+  if(gameLoop)clearInterval(gameLoop);
+  running=true;paused=false;msgEl.textContent='';
+  gameLoop=setInterval(update,120);
+  bonusSpawnTimer=setInterval(spawnBonus,BONUS_INTERVAL);
+  obstacleSpawnTimer=setInterval(spawnObstacle,OBSTACLE_INTERVAL);
+}
+
+function togglePause(){
+  if(!running)return;
+  paused=!paused;
+  if(paused){
+    clearInterval(gameLoop);clearInterval(bonusSpawnTimer);clearInterval(obstacleSpawnTimer);
+    pauseOverlay.style.display='block';msgEl.textContent='Paused — press P to resume';
+  } else {
+    gameLoop=setInterval(update,120);
+    bonusSpawnTimer=setInterval(spawnBonus,BONUS_INTERVAL);
+    obstacleSpawnTimer=setInterval(spawnObstacle,OBSTACLE_INTERVAL);
+    pauseOverlay.style.display='none';msgEl.textContent='';
+  }
+  setPauseUI(paused);
+}
+
+function setPauseUI(p){
+  document.getElementById('iconPause').style.display=p?'none':'block';
+  document.getElementById('iconPlay').style.display=p?'block':'none';
+  document.getElementById('pauseLabel').textContent=p?'Resume':'Pause';
+}
+
+function updateBest(){
+  if(score>bestScore){bestScore=score;localStorage.setItem('snakeBest',bestScore);bestValEl.textContent=bestScore;}
+}
+
+function update(){
+  dir=nextDir;
+  const head={x:(snake[0].x+dir.x+COLS)%COLS,y:(snake[0].y+dir.y+ROWS)%ROWS};
+  if(snake.some(s=>s.x===head.x&&s.y===head.y))return gameOver();
+  if(obstacles.some(o=>o.x===head.x&&o.y===head.y))return gameOver();
+  snake.unshift(head);
+  if(head.x===food.x&&head.y===food.y){
+    score++;scoreValEl.textContent=score;updateBest();placeFood();
+  } else if(bonus&&head.x===bonus.x&&head.y===bonus.y){
+    score+=BONUS_POINTS;scoreValEl.textContent=score;updateBest();
+    bonus=null;clearTimeout(bonusTimer);showFloat('+5 BONUS!');
+  } else {snake.pop();}
+  draw();
+}
+
+let floatMsg='',floatAlpha=0,floatY=0,floatTick=null;
+function showFloat(text){
+  floatMsg=text;floatAlpha=1.0;floatY=canvas.height/2;
+  clearInterval(floatTick);
+  floatTick=setInterval(()=>{floatAlpha-=.04;floatY-=1;if(floatAlpha<=0){floatAlpha=0;clearInterval(floatTick);}},40);
+}
+
+function draw(){
+  const bg=ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+  bg.addColorStop(0,'#0d1b2a');bg.addColorStop(1,'#050d14');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='rgba(78,204,163,0.06)';ctx.lineWidth=0.5;
+  for(let x=0;x<=COLS;x++){ctx.beginPath();ctx.moveTo(x*CELL,0);ctx.lineTo(x*CELL,canvas.height);ctx.stroke();}
+  for(let y=0;y<=ROWS;y++){ctx.beginPath();ctx.moveTo(0,y*CELL);ctx.lineTo(canvas.width,y*CELL);ctx.stroke();}
+  obstacles.forEach(o=>{
+    const x=o.x*CELL,y=o.y*CELL;
+    ctx.shadowColor='#e74c3c';ctx.shadowBlur=8;
+    ctx.fillStyle='#c0392b';ctx.beginPath();ctx.roundRect(x+1,y+1,CELL-2,CELL-2,3);ctx.fill();
+    ctx.shadowBlur=0;ctx.strokeStyle='rgba(255,255,255,0.8)';ctx.lineWidth=2;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(x+5,y+5);ctx.lineTo(x+CELL-5,y+CELL-5);
+    ctx.moveTo(x+CELL-5,y+5);ctx.lineTo(x+5,y+CELL-5);ctx.stroke();ctx.lineWidth=1;
+  });
+  ctx.drawImage(sbCanvas,food.x*CELL,food.y*CELL);
+  if(bonus){
+    const x=bonus.x*CELL,y=bonus.y*CELL;
+    ctx.shadowColor='#e056fd';ctx.shadowBlur=14;
+    ctx.fillStyle='#9b59b6';ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL/2-1,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;ctx.fillStyle='#fff';ctx.font='bold 13px Arial';
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',x+CELL/2,y+CELL/2+1);
+  }
+  snake.forEach((seg,i)=>{
+    const isHead=i===0,x=seg.x*CELL+1,y=seg.y*CELL+1,s=CELL-2;
+    if(isHead){
+      const g=ctx.createRadialGradient(x+s/2,y+s/2,1,x+s/2,y+s/2,s/2);
+      g.addColorStop(0,'#7fffd4');g.addColorStop(1,'#00b894');ctx.fillStyle=g;
+      ctx.shadowColor='#4ecca3';ctx.shadowBlur=10;
+    } else {ctx.fillStyle=`rgba(46,204,113,${Math.max(.4,1-i*.015)})`;ctx.shadowBlur=0;}
+    ctx.beginPath();ctx.roundRect(x,y,s,s,isHead?5:3);ctx.fill();ctx.shadowBlur=0;
+  });
+  if(floatAlpha>0){
+    ctx.save();ctx.globalAlpha=floatAlpha;ctx.fillStyle='#e056fd';
+    ctx.font='bold 24px Segoe UI';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor='#e056fd';ctx.shadowBlur=12;
+    ctx.fillText(floatMsg,canvas.width/2,floatY);ctx.restore();
+  }
+}
+
+function gameOver(){
+  clearInterval(gameLoop);clearInterval(bonusSpawnTimer);clearInterval(obstacleSpawnTimer);
+  obstacleTimers.forEach(clearTimeout);clearTimeout(bonusTimer);
+  running=false;paused=false;pauseOverlay.style.display='none';setPauseUI(false);
+  submitScore(score); // submit to leaderboard
+  if(score>bestScore){
+    bestScore=score;localStorage.setItem('snakeBest',bestScore);bestValEl.textContent=bestScore;
+    msgEl.textContent=`🏆 New Best: ${score}! — Press R to restart`;
+  } else {
+    msgEl.textContent=`Game Over! Score: ${score} — Press R to restart`;
+  }
+}
+
+// ── BUTTON HANDLERS ────────────────────────────────────────
+document.getElementById('btnRestart').addEventListener('click', init);
+document.getElementById('btnPause').addEventListener('click', togglePause);
+document.getElementById('btnFullscreen').addEventListener('click', ()=>{
+  if(!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+});
+let nightMode=false;
+document.getElementById('btnNight').addEventListener('click', ()=>{
+  nightMode=!nightMode;
+  document.body.classList.toggle('night',nightMode);
+  const btn=document.getElementById('btnNight');
+  btn.innerHTML=nightMode
+    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/></svg> Lights On`
+    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> Lights Out`;
+});
+
+// ── KEYBOARD ───────────────────────────────────────────────
+document.addEventListener('keydown', e=>{
+  if(document.getElementById('gate').style.display!=='none')return;
+  switch(e.key){
+    case 'ArrowUp':    if(dir.y!== 1)nextDir={x:0,y:-1};break;
+    case 'ArrowDown':  if(dir.y!==-1)nextDir={x:0,y: 1};break;
+    case 'ArrowLeft':  if(dir.x!== 1)nextDir={x:-1,y:0};break;
+    case 'ArrowRight': if(dir.x!==-1)nextDir={x: 1,y:0};break;
+    case 'r':case 'R': init();return;
+    case 'p':case 'P': togglePause();return;
+    case 'f':case 'F':
+      if(!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+      else document.exitFullscreen(); return;
+    case 'n':case 'N': document.getElementById('btnNight').click();return;
+  }
+  if(!running&&!paused) start();
+});
+</script>
+</body>
+</html>
